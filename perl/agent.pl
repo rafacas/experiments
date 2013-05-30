@@ -14,7 +14,16 @@ if ($^O eq 'linux'){
     print "Unsupported platform: $^O\n";
 }
 
-# Memory & swap: /proc/meminfo
+# Check Memory & swap
+# /proc/meminfo
+if ($^O eq 'linux'){
+    open my $mem, '<', '/proc/meminfo';
+    print <$mem>;
+    close $mem;
+} else {
+    print "Unsupported platform: $^O\n";
+}
+
 # Network traffic: /proc/net/dev
 # CPU stats: mpstat
 # Disk usage: df
