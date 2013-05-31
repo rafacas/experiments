@@ -25,6 +25,14 @@ if ($^O eq 'linux'){
 }
 
 # Network traffic: /proc/net/dev
+if ($^O eq 'linux'){
+    open my $net, '<', '/proc/net/dev';
+    print <$net>;
+    close $net;
+} else {
+    print "Unsupported platform: $^O\n";
+}
+
 # CPU stats: mpstat
 # Disk usage: df
 # IO stats: iostat
