@@ -5,30 +5,32 @@ use warnings;
 
 
 # Check CPU Load Average
-# /proc/loadavg 
+my $loadavg;
 if ($^O eq 'linux'){
-    open my $la, '<', '/proc/loadavg';
-    print <$la>;
-    close $la;
+    open LOADAVG, '<', '/proc/loadavg'; # or die
+    $loadavg = <LOADAVG>;
+    chomp $loadavg;
+    close LOADAVG;
 } else {
     print "Unsupported platform: $^O\n";
 }
 
+print "$loadavg\n";
+
 # Check Memory & swap
-# /proc/meminfo
 if ($^O eq 'linux'){
-    open my $mem, '<', '/proc/meminfo';
-    print <$mem>;
-    close $mem;
+    open MEM, '<', '/proc/meminfo';
+#    print <$mem>;
+    close MEM;
 } else {
     print "Unsupported platform: $^O\n";
 }
 
 # Network traffic: /proc/net/dev
 if ($^O eq 'linux'){
-    open my $net, '<', '/proc/net/dev';
-    print <$net>;
-    close $net;
+    open NET, '<', '/proc/net/dev';
+#    print <$net>;
+    close NET;
 } else {
     print "Unsupported platform: $^O\n";
 }
