@@ -8,10 +8,12 @@ use Log::Message::Simple;
 my $verbose = 1;
 my $debug = 1;
 
-# Check CPU Load Average
-getLoadAvg();
+# perl version check: if ($] < 5.008 )
 
-# Check Memory & swap
+# Check CPU Load Average
+my $loadavg = getLoadAvg();
+
+# Check Memory & Swap
 getMemory();
 
 # Network traffic: /proc/net/dev
@@ -27,9 +29,8 @@ getNetwork();
 
 
 # Send data in JSON
-# http://search.cpan.org/~makamaka/JSON-2.58/lib/JSON.pm
-# JSON::PP has been a core module since perl 5.14
-# perl version check: if ($] < 5.008 )
+
+
 
 # SUBROUTINES
 
@@ -40,16 +41,19 @@ sub getLoadAvg {
         debug("getLoadAvg: linux", $debug);
         debug("getLoadAvg: opening /proc/loadavg file", $debug);
         open LOADAVG, '<', '/proc/loadavg'; # or die
-        $loadavg = <LOADAVG>;
-        chomp $loadavg;
-        debug("getLoadAvg: loadavg -> $loadavg", $debug);
+        my $la = <LOADAVG>;
+        chomp $la;
+        debug("getLoadAvg: loadavg -> $la", $debug);
         close LOADAVG;
+        debug("getLoadAvg: parsing", $debug);
+        my @loadavgs = split(/ /, $la);
+        $loadavg = {'1'=>$loadavgs[0], '5'=>$loadavgs[1], '15'=>$loadavgs[2]};
     } else {
-        debug("Unsupported platform: $^O", $debug);
+        debug("getLoadAvg: Unsupported platform ($^O)", $debug);
     }
 
     debug("getLoadAvg: completed", $debug);
-
+    return $loadavg;
 }
 
 sub getMemory {
@@ -70,4 +74,9 @@ sub getNetwork {
     } else {
         print "Unsupported platform: $^O\n";
     }
+}
+
+sub send_data {
+    # JSON::PP has been a core module since perl 5.14
+
 }
