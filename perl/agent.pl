@@ -3,7 +3,7 @@
 use strict;
 use warnings;
 use Log::Message::Simple;
-use JSON::PP;
+use JSON::PP; # JSON::PP has been a core module since perl 5.14
 
 # Logging options
 my $verbose = 1;
@@ -15,7 +15,7 @@ my $debug = 1;
 my $loadavg = getLoadAvg();
 
 # Check Memory & Swap
-getMemory();
+my $mem = getMemory();
 
 # Network traffic
 getNetwork();
@@ -32,6 +32,7 @@ getNetwork();
 # Send data in JSON
 my $stats = {};
 $stats->{loadavg} = $loadavg if defined $loadavg;
+$stats->{mem} = $mem if defined $mem;
 
 my $json_stats = encode_json $stats;
 debug("json: $json_stats", $debug);
@@ -53,7 +54,7 @@ sub getLoadAvg {
         my @loadavgs = split(/ /, $la);
         $loadavg = {'1'=>$loadavgs[0], '5'=>$loadavgs[1], '15'=>$loadavgs[2]};
     } else {
-        debug("getLoadAvg: Unsupported platform ($^O)", $debug);
+        debug("getLoadAvg: unsupported platform ($^O)", $debug);
     }
 
     debug("getLoadAvg: completed", $debug);
@@ -61,18 +62,40 @@ sub getLoadAvg {
 }
 
 sub getMemory {
+    my $mem;
     if ($^O eq 'linux'){
-        open MEM, '<', '/proc/meminfo';
-        #print <$mem>;
+        debug("getMemory: start", $debug);
+        debug("getMemory: opening /proc/meminfo", $debug);
+        open MEM, '<', '/proc/meminfo'; # or die
+        # Create a hash with the values of /proc/meminfo
+        debug("getMemory: parsing", $debug);
+        my $meminfo = {};
+        while (<MEM>){
+            chomp $_;
+            my @mem_values = split(/:/, $_);
+            # Remove spaces and kB
+            $mem_values[1] =~ /\s+([0-9]+)\s+kB/;
+            $meminfo->{$mem_values[0]} = $1;
+        }
         close MEM;
+        debug("getMemory: mem hash", $debug);
+        $mem = { 'MemTotal'  => $meminfo->{MemTotal},
+                 'MemFree'   => $meminfo->{MemFree},
+                 'Buffers'   => $meminfo->{Buffers},
+                 'Cached'    => $meminfo->{Cached},
+                 'SwapTotal' => $meminfo->{SwapTotal},
+                 'SwapFree'  => $meminfo->{SwapFree} };
     } else {
-        print "Unsupported platform: $^O\n";
+        debug("getMemory: unsupported platform: $^O", $debug);
     }
+
+    debug("getMemory: completed", $debug);
+    return $mem;
 }
 
 sub getNetwork {
     if ($^O eq 'linux'){
-        open NET, '<', '/proc/net/dev';
+        open NET, '<', '/proc/net/dev'; # or die
         #print <$net>;
         close NET;
     } else {
@@ -81,6 +104,5 @@ sub getNetwork {
 }
 
 sub send_data {
-    # JSON::PP has been a core module since perl 5.14
 
 }
