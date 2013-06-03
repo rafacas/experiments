@@ -3,6 +3,7 @@
 use strict;
 use warnings;
 use Log::Message::Simple;
+use JSON::PP;
 
 # Logging options
 my $verbose = 1;
@@ -16,7 +17,7 @@ my $loadavg = getLoadAvg();
 # Check Memory & Swap
 getMemory();
 
-# Network traffic: /proc/net/dev
+# Network traffic
 getNetwork();
 
 # CPU stats: mpstat
@@ -29,8 +30,11 @@ getNetwork();
 
 
 # Send data in JSON
+my $stats = {};
+$stats->{loadavg} = $loadavg if defined $loadavg;
 
-
+my $json_stats = encode_json $stats;
+debug("json: $json_stats", $debug);
 
 # SUBROUTINES
 
