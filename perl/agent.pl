@@ -11,32 +11,43 @@ my $debug = 1;
 
 # perl version check: if ($] < 5.008 )
 
-# Check CPU Load Average
-my $loadavg = get_loadavg();
 
-# Check Memory & Swap
-my $mem = get_memory();
+# flush the buffer
+$| = 1;
 
-# Network traffic
-my $net = get_network();
+# daemonize the agent
+&daemonize;
 
-# CPU stats: mpstat
+while(1){
+    # Check CPU Load Average
+    my $loadavg = get_loadavg();
+
+    # Check Memory & Swap
+    my $mem = get_memory();
+
+    # Network traffic
+    my $net = get_network();
+
+    # CPU stats: mpstat
 
 
-# Disk usage: df
+    # Disk usage: df
 
 
-# IO stats: iostat
+    # IO stats: iostat
 
 
-# Send data in JSON
-my $stats = {};
-$stats->{loadavg} = $loadavg if defined $loadavg;
-$stats->{mem} = $mem if defined $mem;
-$stats->{net} = $net if defined $net;
+    # Send data in JSON
+    my $stats = {};
+    $stats->{loadavg} = $loadavg if defined $loadavg;
+    $stats->{mem} = $mem if defined $mem;
+    $stats->{net} = $net if defined $net;
 
-my $json_stats = encode_json $stats;
-debug("json: $json_stats", $debug);
+    my $json_stats = encode_json $stats;
+    debug("json: $json_stats", $debug);
+
+    sleep(60);
+}
 
 # SUBROUTINES
 
@@ -130,4 +141,24 @@ sub get_network {
 
 sub send_data {
 
+}
+
+# http://stackoverflow.com/questions/766397/how-can-i-run-a-perl-script-as-a-system-daemon-in-linux
+sub daemonize {
+    use POSIX;
+    POSIX::setsid or die "setsid: $!";
+    my $pid = fork ();
+    if ($pid < 0) {
+        die "fork: $!";
+    } elsif ($pid) {
+        exit 0;
+    }
+    chdir "/";
+    umask 0;
+    foreach (0 .. (POSIX::sysconf (&POSIX::_SC_OPEN_MAX) || 1024)){
+        POSIX::close $_;
+    }
+    open (STDIN, "</dev/null");
+    open (STDOUT, ">/dev/null");
+    open (STDERR, ">&STDOUT");
 }
