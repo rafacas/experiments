@@ -9,6 +9,9 @@ use JSON::PP; # JSON::PP has been a core module since perl 5.14
 my $verbose = 1;
 my $debug = 1;
 
+# Network traffic values 
+my $network_traffic_last_check = {};
+
 # perl version check: if ($] < 5.008 )
 
 
@@ -16,17 +19,17 @@ my $debug = 1;
 $| = 1;
 
 # daemonize the agent
-&daemonize;
+#&daemonize;
 
 while(1){
     # Check CPU Load Average
     my $loadavg = get_loadavg();
 
     # Check Memory & Swap
-    my $mem = get_memory();
+    my $memory = get_memory();
 
     # Network traffic
-    my $net = get_network();
+    my $network_traffic = get_network();
 
     # CPU stats: mpstat
 
@@ -40,13 +43,13 @@ while(1){
     # Send data in JSON
     my $stats = {};
     $stats->{loadavg} = $loadavg if defined $loadavg;
-    $stats->{mem} = $mem if defined $mem;
-    $stats->{net} = $net if defined $net;
+    $stats->{memory} = $memory if defined $memory;
+    $stats->{network_traffic} = $network_traffic if defined $network_traffic;
 
     my $json_stats = encode_json $stats;
     debug("json: $json_stats", $debug);
 
-    sleep(60);
+    sleep(5);
 }
 
 # SUBROUTINES
@@ -81,18 +84,18 @@ sub get_memory {
     if ($^O eq 'linux'){
         debug("get_memory: linux", $debug);
         debug("get_memory: opening /proc/meminfo", $debug);
-        open MEM, '<', '/proc/meminfo'; # or die
+        open MEMINFO, '<', '/proc/meminfo'; # or die
         # Create a hash with the values of /proc/meminfo
         debug("get_memory: parsing", $debug);
         my $meminfo = {};
-        while (<MEM>){
+        while (<MEMINFO>){
             chomp $_;
             my @mem_values = split(/:/, $_);
             # Remove spaces and kB
             $mem_values[1] =~ /\s+([0-9]+)\s+kB/;
             $meminfo->{$mem_values[0]} = $1;
         }
-        close MEM;
+        close MEMINFO;
         debug("get_memory: mem hash", $debug);
         $mem = { 'MemTotal'  => $meminfo->{MemTotal},
                  'MemFree'   => $meminfo->{MemFree},
@@ -112,31 +115,52 @@ sub get_memory {
 # https://gist.github.com/jyotty/5052108
 sub get_network {
     debug("get_network: start", $debug);
-    my $network;
+    my $network_stats = {};
     if ($^O eq 'linux'){
         debug("get_network: linux", $debug);
         debug("get_network: opening /proc/net/dev", $debug);
-        open NET, '<', '/proc/net/dev'; # or die
+        open NET_DEV, '<', '/proc/net/dev'; # or die
         my @rx_fields = qw(bytes packets errs drop fifo frame compressed multicast);
         my @tx_fields = qw(bytes packets errs drop fifo frame compressed);
         debug("get_network: parsing", $debug);
-        $network = {};
-        while (<NET>){
+        while (<NET_DEV>){
             next if $_ !~ /:/;
             $_ =~ s/^\s+|\s+$//g;
             my ($iface, %rx, %tx);
             debug("get_network: iface -> $_", $debug);
             ($iface, @rx{@rx_fields}, @tx{@tx_fields}) = split /[: ]+/, $_;
-            $network->{$iface}->{rx}->{$_} = $rx{$_} for keys %rx;
-            $network->{$iface}->{tx}->{$_} = $tx{$_} for keys %tx;
+            $network_stats->{$iface}->{rx}->{$_} = $rx{$_} for keys %rx;
+            $network_stats->{$iface}->{tx}->{$_} = $tx{$_} for keys %tx;
         }
-        close NET;
+        close NET_DEV;
     } else {
         debug("get_network: unsupported platform: $^O", $debug);
     }
 
+    debug("get_network: get network traffic since last check", $debug);
+    my $network_traffic;
+    foreach my $iface (keys %$network_stats){
+        if(%$network_traffic_last_check){
+            $network_traffic = {};
+            # network traffic since last check
+            my $rx = $network_stats->{$iface}->{rx}->{bytes} - $network_traffic_last_check->{rx};
+            my $tx = $network_stats->{$iface}->{tx}->{bytes} - $network_traffic_last_check->{tx};
+            $rx = $network_stats->{$iface}->{rx}->{bytes} if $rx < 0;
+            $tx = $network_stats->{$iface}->{tx}->{bytes} if $tx < 0;
+            $network_traffic->{$iface}->{rx} = $rx;
+            $network_traffic->{$iface}->{tx} = $tx;
+            # store traffic for next check
+            $network_traffic_last_check->{rx} = $rx;
+            $network_traffic_last_check->{tx} = $tx;
+        } else {
+            # first check
+            $network_traffic_last_check->{$iface}->{rx} = $network_stats->{$iface}->{rx}->{bytes};
+            $network_traffic_last_check->{$iface}->{tx} = $network_stats->{$iface}->{tx}->{bytes};
+        }
+    }
+
     debug("get_network: completed", $debug);
-    return $network;
+    return $network_traffic;
 }
 
 sub send_data {
