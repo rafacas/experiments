@@ -127,7 +127,7 @@ sub get_network {
             next if $_ !~ /:/;
             $_ =~ s/^\s+|\s+$//g;
             my ($iface, %rx, %tx);
-            debug("get_network: iface -> $_", $debug);
+            debug("get_network: iface - $_", $debug);
             ($iface, @rx{@rx_fields}, @tx{@tx_fields}) = split /[: ]+/, $_;
             $network_stats->{$iface}->{rx}->{$_} = $rx{$_} for keys %rx;
             $network_stats->{$iface}->{tx}->{$_} = $tx{$_} for keys %tx;
@@ -138,25 +138,21 @@ sub get_network {
     }
 
     debug("get_network: get network traffic since last check", $debug);
-    my $network_traffic;
+    my $network_traffic = {};
     foreach my $iface (keys %$network_stats){
-        if(%$network_traffic_last_check){
-            $network_traffic = {};
+        if(%$network_traffic_last_check->{$iface}){
             # network traffic since last check
-            my $rx = $network_stats->{$iface}->{rx}->{bytes} - $network_traffic_last_check->{rx};
-            my $tx = $network_stats->{$iface}->{tx}->{bytes} - $network_traffic_last_check->{tx};
+            my $rx = $network_stats->{$iface}->{rx}->{bytes} - $network_traffic_last_check->{$iface}->{rx};
+            my $tx = $network_stats->{$iface}->{tx}->{bytes} - $network_traffic_last_check->{$iface}->{tx};
             $rx = $network_stats->{$iface}->{rx}->{bytes} if $rx < 0;
             $tx = $network_stats->{$iface}->{tx}->{bytes} if $tx < 0;
             $network_traffic->{$iface}->{rx} = $rx;
             $network_traffic->{$iface}->{tx} = $tx;
-            # store traffic for next check
-            $network_traffic_last_check->{rx} = $rx;
-            $network_traffic_last_check->{tx} = $tx;
-        } else {
-            # first check
-            $network_traffic_last_check->{$iface}->{rx} = $network_stats->{$iface}->{rx}->{bytes};
-            $network_traffic_last_check->{$iface}->{tx} = $network_stats->{$iface}->{tx}->{bytes};
-        }
+            debug("get_network: $iface - rx: $rx tx: $tx", $debug);
+        } 
+        # store traffic for next check
+        $network_traffic_last_check->{$iface}->{rx} = $network_stats->{$iface}->{rx}->{bytes};
+        $network_traffic_last_check->{$iface}->{tx} = $network_stats->{$iface}->{tx}->{bytes};
     }
 
     debug("get_network: completed", $debug);
