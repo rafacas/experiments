@@ -141,7 +141,7 @@ sub get_network_traffic {
     debug("get_network_traffic: get network traffic since last check", $debug);
     my $network_traffic = {};
     foreach my $iface (keys %$network_stats){
-        if(%$network_traffic_last_check->{$iface}){
+        if($network_traffic_last_check->{$iface}){
             # network traffic since last check
             my $rx = $network_stats->{$iface}->{rx}->{bytes} - $network_traffic_last_check->{$iface}->{rx};
             my $tx = $network_stats->{$iface}->{tx}->{bytes} - $network_traffic_last_check->{$iface}->{tx};
