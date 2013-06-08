@@ -165,20 +165,26 @@ sub get_cpu_stats {
     my $cpu = {};
     debug("get_cpu_stats: run mpstat -P ALL", $debug);
     open MPSTAT, "mpstat -P ALL |"; # or die
-    my @cpu_stat_fields = qw(cpu usr nice sys iowait irq soft steal guest idle);
+    my @cpu_stat_fields = qw(usr nice sys iowait irq soft steal guest idle);
+    # number of fields of the mpstat time depend on the system: 
+    # 12 hour time - 2 fields: 01:18:34 PM
+    # 24 hour time - 1 field: 13:18:34
+    my @hour_12 = qw(time am_pm);
+    my @hour_24 = qw(time);
+    my @timestamp_fields = @hour_24;
     debug("get_cpu_stats: parsing", $debug);
     while (<MPSTAT>){
         chomp $_;
-        next if $_ !~ /^[0-9]/; # skip the first two lines
-        next if $_ =~ /CPU/; # skip the heade # skip the header
+        next if $_ !~ /^[0-9]/ || $_ =~ /CPU/; # skip the first two lines and the header
         debug("get_cpu_stats: $_", $debug);
-        my ($timestamp, %cpu_stats);
-        ($timestamp, @cpu_stats{@cpu_stat_fields}) = split /[ ]+/, $_;
-        $cpu->{$_} = $cpu_stats{$_} for keys %cpu_stats;
+        @timestamp_fields = @hour_12 if $_ =~ /(AM|PM)/;
+        my (%timestamp, $cpu_id, %cpu_stats);
+        (@timestamp{@timestamp_fields}, $cpu_id, @cpu_stats{@cpu_stat_fields}) = split /[ ]+/, $_;
+        $cpu->{$cpu_id}->{$_} = $cpu_stats{$_} for keys %cpu_stats;
     }
     close MPSTAT;
 
-    debug("get_cpu_stats: completed");
+    debug("get_cpu_stats: completed", $debug);
     return $cpu;
 }
 
