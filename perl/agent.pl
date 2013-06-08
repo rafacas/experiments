@@ -22,22 +22,22 @@ $| = 1;
 #&daemonize;
 
 while(1){
-    # Check CPU Load Average
+    # Check CPU load average
     my $loadavg = get_loadavg();
 
-    # Check Memory & Swap
+    # Check memory & swap
     my $memory = get_memory();
 
-    # Network traffic
-    my $network_traffic = get_network();
+    # Check network traffic
+    my $network_traffic = get_network_traffic();
 
-    # CPU stats: mpstat
+    # Check CPU stats
+    my $cpu_stats = get_cpu_stats();
+
+    # Check disk usage
 
 
-    # Disk usage: df
-
-
-    # IO stats: iostat
+    # Check IO stats
 
 
     # Send data in JSON
@@ -45,6 +45,7 @@ while(1){
     $stats->{loadavg} = $loadavg if defined $loadavg;
     $stats->{memory} = $memory if defined $memory;
     $stats->{network_traffic} = $network_traffic if defined $network_traffic;
+    $stats->{cpu} = $cpu_stats if defined $cpu_stats;
 
     my $json_stats = encode_json $stats;
     debug("json: $json_stats", $debug);
@@ -64,7 +65,7 @@ sub get_loadavg {
         open LOADAVG, '<', '/proc/loadavg'; # or die
         my $la = <LOADAVG>;
         chomp $la;
-        debug("get_loadavg: loadavg -> $la", $debug);
+        debug("get_loadavg: loadavg - $la", $debug);
         close LOADAVG;
         debug("get_loadavg: parsing", $debug);
         my @loadavgs = split(/ /, $la);
@@ -113,31 +114,31 @@ sub get_memory {
 
 # Get network stats parsing /proc/dev/net
 # https://gist.github.com/jyotty/5052108
-sub get_network {
-    debug("get_network: start", $debug);
+sub get_network_traffic {
+    debug("get_network_traffic: start", $debug);
     my $network_stats = {};
     if ($^O eq 'linux'){
-        debug("get_network: linux", $debug);
-        debug("get_network: opening /proc/net/dev", $debug);
+        debug("get_network_traffic: linux", $debug);
+        debug("get_network_traffic: opening /proc/net/dev", $debug);
         open NET_DEV, '<', '/proc/net/dev'; # or die
         my @rx_fields = qw(bytes packets errs drop fifo frame compressed multicast);
         my @tx_fields = qw(bytes packets errs drop fifo frame compressed);
-        debug("get_network: parsing", $debug);
+        debug("get_network_traffic: parsing", $debug);
         while (<NET_DEV>){
             next if $_ !~ /:/;
             $_ =~ s/^\s+|\s+$//g;
             my ($iface, %rx, %tx);
-            debug("get_network: iface - $_", $debug);
+            debug("get_network_traffic: iface - $_", $debug);
             ($iface, @rx{@rx_fields}, @tx{@tx_fields}) = split /[: ]+/, $_;
             $network_stats->{$iface}->{rx}->{$_} = $rx{$_} for keys %rx;
             $network_stats->{$iface}->{tx}->{$_} = $tx{$_} for keys %tx;
         }
         close NET_DEV;
     } else {
-        debug("get_network: unsupported platform: $^O", $debug);
+        debug("get_network_traffic: unsupported platform: $^O", $debug);
     }
 
-    debug("get_network: get network traffic since last check", $debug);
+    debug("get_network_traffic: get network traffic since last check", $debug);
     my $network_traffic = {};
     foreach my $iface (keys %$network_stats){
         if(%$network_traffic_last_check->{$iface}){
@@ -148,15 +149,37 @@ sub get_network {
             $tx = $network_stats->{$iface}->{tx}->{bytes} if $tx < 0;
             $network_traffic->{$iface}->{rx} = $rx;
             $network_traffic->{$iface}->{tx} = $tx;
-            debug("get_network: $iface - rx: $rx tx: $tx", $debug);
+            debug("get_network_traffic: $iface - rx: $rx tx: $tx", $debug);
         } 
         # store traffic for next check
         $network_traffic_last_check->{$iface}->{rx} = $network_stats->{$iface}->{rx}->{bytes};
         $network_traffic_last_check->{$iface}->{tx} = $network_stats->{$iface}->{tx}->{bytes};
     }
 
-    debug("get_network: completed", $debug);
+    debug("get_network_traffic: completed", $debug);
     return $network_traffic;
+}
+
+sub get_cpu_stats {
+    debug("get_cpu_stats: start", $debug);
+    my $cpu = {};
+    debug("get_cpu_stats: run mpstat -P ALL", $debug);
+    open MPSTAT, "mpstat -P ALL |"; # or die
+    my @cpu_stat_fields = qw(cpu usr nice sys iowait irq soft steal guest idle);
+    debug("get_cpu_stats: parsing", $debug);
+    while (<MPSTAT>){
+        chomp $_;
+        next if $_ !~ /^[0-9]/; # skip the first two lines
+        next if $_ =~ /CPU/; # skip the heade # skip the header
+        debug("get_cpu_stats: $_", $debug);
+        my ($timestamp, %cpu_stats);
+        ($timestamp, @cpu_stats{@cpu_stat_fields}) = split /[ ]+/, $_;
+        $cpu->{$_} = $cpu_stats{$_} for keys %cpu_stats;
+    }
+    close MPSTAT;
+
+    debug("get_cpu_stats: completed");
+    return $cpu;
 }
 
 sub send_data {
