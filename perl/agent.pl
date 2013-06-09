@@ -70,6 +70,7 @@ sub get_loadavg {
         debug("get_loadavg: parsing", $debug);
         my @loadavgs = split(/ /, $la);
         $loadavg = {'1'=>$loadavgs[0], '5'=>$loadavgs[1], '15'=>$loadavgs[2]};
+        debug("get_loadavg: 1:$loadavg->{1} 5:$loadavg->{5} 15:$loadavg->{15}", $debug);
     } else {
         debug("get_loadavg: unsupported platform ($^O)", $debug);
     }
@@ -97,13 +98,13 @@ sub get_memory {
             $meminfo->{$mem_values[0]} = $1;
         }
         close MEMINFO;
-        debug("get_memory: mem hash", $debug);
         $mem = { 'MemTotal'  => $meminfo->{MemTotal},
                  'MemFree'   => $meminfo->{MemFree},
                  'Buffers'   => $meminfo->{Buffers},
                  'Cached'    => $meminfo->{Cached},
                  'SwapTotal' => $meminfo->{SwapTotal},
                  'SwapFree'  => $meminfo->{SwapFree} };
+        debug("get_memory: MemTotal:$mem->{MemTotal} MemFree:$mem->{MemFree} Buffers:$mem->{Buffers} Cached:$mem->{Cached} SwapTotal:$mem->{SwapTotal} SwapFree: $mem->{SwapFree}", $debug);
     } else {
         debug("get_memory: unsupported platform: $^O", $debug);
     }
