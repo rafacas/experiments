@@ -35,7 +35,7 @@ while(1){
     my $cpu_stats = get_cpu_stats();
 
     # Check disk usage
-
+    my $disk_usage = get_disk_usage();
 
     # Check IO stats
 
@@ -46,6 +46,7 @@ while(1){
     $stats->{memory} = $memory if defined $memory;
     $stats->{network_traffic} = $network_traffic if defined $network_traffic;
     $stats->{cpu} = $cpu_stats if defined $cpu_stats;
+    $stats->{disk} = $disk_usage if defined $disk_usage;
 
     my $json_stats = encode_json $stats;
     debug("json: $json_stats", $debug);
@@ -114,12 +115,12 @@ sub get_memory {
 }
 
 # Get network stats parsing /proc/dev/net
-# https://gist.github.com/jyotty/5052108
 sub get_network_traffic {
     debug("get_network_traffic: start", $debug);
-    my $network_stats = {};
+    my $network_traffic;
     if ($^O eq 'linux'){
         debug("get_network_traffic: linux", $debug);
+        my $network_stats = {};
         debug("get_network_traffic: opening /proc/net/dev", $debug);
         open NET_DEV, '<', '/proc/net/dev'; # or die
         my @rx_fields = qw(bytes packets errs drop fifo frame compressed multicast);
@@ -135,26 +136,28 @@ sub get_network_traffic {
             $network_stats->{$iface}->{tx}->{$_} = $tx{$_} for keys %tx;
         }
         close NET_DEV;
+
+        debug("get_network_traffic: get network traffic since last check", $debug);
+        $network_traffic = {};
+        foreach my $iface (keys %$network_stats){
+            if($network_traffic_last_check->{$iface}){
+                # network traffic since last check
+                my $rx = $network_stats->{$iface}->{rx}->{bytes} - $network_traffic_last_check->{$iface}->{rx};
+                my $tx = $network_stats->{$iface}->{tx}->{bytes} - $network_traffic_last_check->{$iface}->{tx};
+                $rx = $network_stats->{$iface}->{rx}->{bytes} if $rx < 0;
+                $tx = $network_stats->{$iface}->{tx}->{bytes} if $tx < 0;
+                $network_traffic->{$iface}->{rx} = $rx;
+                $network_traffic->{$iface}->{tx} = $tx;
+                debug("get_network_traffic: $iface - rx: $rx tx: $tx", $debug);
+            } 
+            # store traffic for next check
+            $network_traffic_last_check->{$iface}->{rx} = $network_stats->{$iface}->{rx}->{bytes};
+            $network_traffic_last_check->{$iface}->{tx} = $network_stats->{$iface}->{tx}->{bytes};
+        }
+    
     } else {
         debug("get_network_traffic: unsupported platform: $^O", $debug);
-    }
-
-    debug("get_network_traffic: get network traffic since last check", $debug);
-    my $network_traffic = {};
-    foreach my $iface (keys %$network_stats){
-        if($network_traffic_last_check->{$iface}){
-            # network traffic since last check
-            my $rx = $network_stats->{$iface}->{rx}->{bytes} - $network_traffic_last_check->{$iface}->{rx};
-            my $tx = $network_stats->{$iface}->{tx}->{bytes} - $network_traffic_last_check->{$iface}->{tx};
-            $rx = $network_stats->{$iface}->{rx}->{bytes} if $rx < 0;
-            $tx = $network_stats->{$iface}->{tx}->{bytes} if $tx < 0;
-            $network_traffic->{$iface}->{rx} = $rx;
-            $network_traffic->{$iface}->{tx} = $tx;
-            debug("get_network_traffic: $iface - rx: $rx tx: $tx", $debug);
-        } 
-        # store traffic for next check
-        $network_traffic_last_check->{$iface}->{rx} = $network_stats->{$iface}->{rx}->{bytes};
-        $network_traffic_last_check->{$iface}->{tx} = $network_stats->{$iface}->{tx}->{bytes};
+        return $network_traffic;
     }
 
     debug("get_network_traffic: completed", $debug);
@@ -163,30 +166,65 @@ sub get_network_traffic {
 
 sub get_cpu_stats {
     debug("get_cpu_stats: start", $debug);
-    my $cpu = {};
-    debug("get_cpu_stats: run mpstat -P ALL", $debug);
-    open MPSTAT, "mpstat -P ALL |"; # or die
-    my @cpu_stat_fields = qw(usr nice sys iowait irq soft steal guest idle);
-    # number of fields of the mpstat time depend on the system: 
-    # 12 hour time - 2 fields: 01:18:34 PM
-    # 24 hour time - 1 field: 13:18:34
-    my @hour_12 = qw(time am_pm);
-    my @hour_24 = qw(time);
-    my @timestamp_fields = @hour_24;
-    debug("get_cpu_stats: parsing", $debug);
-    while (<MPSTAT>){
-        chomp $_;
-        next if $_ !~ /^[0-9]/ || $_ =~ /CPU/; # skip the first two lines and the header
-        debug("get_cpu_stats: $_", $debug);
-        @timestamp_fields = @hour_12 if $_ =~ /(AM|PM)/;
-        my (%timestamp, $cpu_id, %cpu_stats);
-        (@timestamp{@timestamp_fields}, $cpu_id, @cpu_stats{@cpu_stat_fields}) = split /[ ]+/, $_;
-        $cpu->{$cpu_id}->{$_} = $cpu_stats{$_} for keys %cpu_stats;
+    my $cpu;
+    if ($^O eq 'linux'){
+        debug("get_cpu_stats: linux", $debug);
+        $cpu = {};
+        debug("get_cpu_stats: mpstat -P ALL", $debug);
+        open MPSTAT, "mpstat -P ALL |"; # or die
+        my @cpu_stat_fields = qw(usr nice sys iowait irq soft steal guest idle);
+        # number of fields of the mpstat time depend on the system: 
+        # 12 hour time - 2 fields: 01:18:34 PM
+        # 24 hour time - 1 field: 13:18:34
+        my @hour_12 = qw(time am_pm);
+        my @hour_24 = qw(time);
+        my @timestamp_fields = @hour_24;
+        debug("get_cpu_stats: parsing", $debug);
+        while (<MPSTAT>){
+            chomp $_;
+            next if $_ !~ /^[0-9]/ || $_ =~ /CPU/; # skip the first two lines and the header
+            debug("get_cpu_stats: $_", $debug);
+            @timestamp_fields = @hour_12 if $_ =~ /(AM|PM)/;
+            my (%timestamp, $cpu_id, %cpu_stats);
+            (@timestamp{@timestamp_fields}, $cpu_id, @cpu_stats{@cpu_stat_fields}) = split /[ ]+/, $_;
+            $cpu->{$cpu_id}->{$_} = $cpu_stats{$_} for keys %cpu_stats;
+        }
+        close MPSTAT;
+    } else {
+        debug("get_cpu_stats: unsupported platform: $^O", $debug);
+        return $cpu;
     }
-    close MPSTAT;
-
+    
     debug("get_cpu_stats: completed", $debug);
     return $cpu;
+}
+
+sub get_disk_usage {
+    debug("get_disk_usage: start", $debug);
+    my $disks;
+    if ($^O eq 'linux'){
+        debug("get_disk_usage: linux", $debug);
+        $disks = {};
+        my @df_fields = qw(filesystem 1k-blocks used available usage_p);
+        # Run df with the -k option to get 1K (1024) byte blocks
+        debug("get_disk_usage: df -k", $debug);
+        open DF, "df -k |"; # or die
+        while (<DF>){
+            next if $. == 1; # skip the header
+            chomp $_;
+            debug("get_disk_usage: $_", $debug);
+            my (%filesystems, $mount_point);
+            (@filesystems{@df_fields}, $mount_point) = split /[ ]+/, $_;
+            $disks->{$mount_point}->{$_} = $filesystems{$_} for keys %filesystems;
+        }        
+        close DF;
+    } else {
+        debug("get_disk_usage: unsupported platform: $^O", $debug);
+        return $disks;
+    }
+
+    debug("get_disk_usage: completed", $debug);
+    return $disks;
 }
 
 sub send_data {
