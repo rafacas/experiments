@@ -38,7 +38,7 @@ while(1){
     my $disk_usage = get_disk_usage();
 
     # Check IO stats
-
+    my $io_stats = get_io_stats();
 
     # Send data in JSON
     my $stats = {};
@@ -47,6 +47,7 @@ while(1){
     $stats->{network_traffic} = $network_traffic if defined $network_traffic;
     $stats->{cpu} = $cpu_stats if defined $cpu_stats;
     $stats->{disk} = $disk_usage if defined $disk_usage;
+    $stats->{io} = $io_stats if defined $io_stats;
 
     my $json_stats = encode_json $stats;
     debug("json: $json_stats", $debug);
@@ -225,6 +226,43 @@ sub get_disk_usage {
 
     debug("get_disk_usage: completed", $debug);
     return $disks;
+}
+
+sub get_io_stats {
+    debug("get_io_stats: start", $debug);
+    my $io;
+    if ($^O eq 'linux'){
+        debug("get_io_stats: linux", $debug);
+        $io = {};
+        my @iostat_fields = qw(rrqm_s wrqm_s r_s w_s rkB_s wkB_s avgrq-sz avgqu-sz await r_await w_await svctm util_p);
+        # Run: iostat -d -x -k 1 2
+        # -d: displays the device utilisation report
+        # -x: displays extended statistics
+        # -k: displays statistics in kilobytes per second
+        # the count is 2 because we store the second report (the first one has "noise").
+        debug("get_io_stats: iostat -d -x -k 1 2", $debug);
+        open IOSTAT, "iostat -d -x -k 1 2 |"; # or die
+        my $first_device = 1;
+        while (<IOSTAT>){
+            next if $_ !~ /^Device:/;
+            if ($first_device){
+                $first_device = 0;
+                next;
+            }
+            my $stats = <IOSTAT>; # discard the header ang get the stats line
+            chomp $stats;
+            debug("get_io_stats: $stats", $debug);
+            my ($device, %io_stats);
+            ($device, @io_stats{@iostat_fields}) = split /[ ]+/, $stats;
+            $io->{$device}->{$_} = $io_stats{$_} for keys %io_stats;
+        }
+    } else {
+        debug("get_io_stats: unsupported platform: $^O", $debug);
+        return $io;
+    }
+
+    debug("get_io_stats: completed", $debug);
+    return $io;
 }
 
 sub send_data {
