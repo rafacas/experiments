@@ -12,8 +12,8 @@ my $debug = 1;
 # Network traffic values 
 my $network_traffic_last_check = {};
 
-# perl version check: if ($] < 5.008 )
-
+# perl version check 
+print "perl version: $^V";
 
 # flush the buffer
 $| = 1;
