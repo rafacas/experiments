@@ -2,7 +2,9 @@
 
 use strict;
 use warnings;
-use Log::Message::Simple;
+use Log::Message::Simple qw[msg error debug
+ carp croak cluck confess];
+use Log::Message::Simple qw[:STD :CARP];
 use JSON::PP; # JSON::PP has been a core module since perl 5.14
 
 # Logging options
@@ -13,7 +15,15 @@ my $debug = 1;
 my $network_traffic_last_check = {};
 
 # perl version check 
-print "perl version: $^V";
+debug("perl version: $^V", $debug);
+my $version = $^V;
+$version =~ /v([0-9]+)\.([0-9]+)\.([0-9]+)/;
+my ($M_v, $m_v) = ($1, $2);
+# Script only run between versions 5.14.x - 5.18.x
+# If version < 5.14.x -> JSON::PP is not included in perl core
+# If version > 5.18.x -> Log::Message::Simple has been removed from core
+croak("perl5 is needed") if ($M_v != 5); # Is this really necessary?
+croak("unsupported perl version (must be between 5.14.x and 5.18.x)") if ($m_v < 14 || $m_v > 18); 
 
 # flush the buffer
 $| = 1;
