@@ -11,6 +11,8 @@ use JSON::PP; # JSON::PP has been a core module since perl 5.14
 my $verbose = 1;
 my $debug = 1;
 
+my $check_interval = 60; # Send data every minute
+
 # Network traffic values 
 my $network_traffic_last_check = {};
 
@@ -32,6 +34,8 @@ $| = 1;
 #&daemonize;
 
 while(1){
+    my $wake_time = time + $check_interval;
+
     # Check CPU load average
     my $loadavg = get_loadavg();
 
@@ -62,7 +66,9 @@ while(1){
     my $json_stats = encode_json $stats;
     debug("json: $json_stats", $debug);
 
-    sleep(5);
+    my $sleep_duration = $wake_time - time;
+    debug("sleep duration: $sleep_duration", $debug);
+    sleep($sleep_duration);
 }
 
 # SUBROUTINES
