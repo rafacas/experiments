@@ -35,40 +35,9 @@ $| = 1;
 
 while(1){
     my $wake_time = time + $check_interval;
-
-    # Check CPU load average
-    my $loadavg = get_loadavg();
-
-    # Check memory & swap
-    my $memory = get_memory();
-
-    # Check network traffic
-    my $network_traffic = get_network_traffic();
-
-    # Check CPU stats
-    my $cpu_stats = get_cpu_stats();
-
-    # Check disk usage
-    my $disk_usage = get_disk_usage();
-
-    # Check IO stats
-    my $io_stats = get_io_stats();
-
-    # Send data in JSON
-    my $stats = {};
-    $stats->{loadavg} = $loadavg if defined $loadavg;
-    $stats->{memory} = $memory if defined $memory;
-    $stats->{network_traffic} = $network_traffic if defined $network_traffic;
-    $stats->{cpu} = $cpu_stats if defined $cpu_stats;
-    $stats->{disk} = $disk_usage if defined $disk_usage;
-    $stats->{io} = $io_stats if defined $io_stats;
-
-    my $json_stats = encode_json $stats;
-    debug("json: $json_stats", $debug);
-
-    my $sleep_duration = $wake_time - time;
-    debug("sleep duration: $sleep_duration", $debug);
-    sleep($sleep_duration);
+    my $stats = do_checks();
+    send_stats($stats);
+    sleep($wake_time - time);
 }
 
 # SUBROUTINES
@@ -281,7 +250,41 @@ sub get_io_stats {
     return $io;
 }
 
-sub send_data {
+sub do_checks {
+    # Check CPU load average
+    my $loadavg = get_loadavg();
+
+    # Check memory & swap
+    my $memory = get_memory();
+
+    # Check network traffic
+    my $network_traffic = get_network_traffic();
+
+    # Check CPU stats
+    my $cpu_stats = get_cpu_stats();
+
+    # Check disk usage
+    my $disk_usage = get_disk_usage();
+
+    # Check IO stats
+    my $io_stats = get_io_stats();
+
+    # Convert data to JSON
+    my $stats = {};
+    $stats->{loadavg} = $loadavg if defined $loadavg;
+    $stats->{memory} = $memory if defined $memory;
+    $stats->{network_traffic} = $network_traffic if defined $network_traffic;
+    $stats->{cpu} = $cpu_stats if defined $cpu_stats;
+    $stats->{disk} = $disk_usage if defined $disk_usage;
+    $stats->{io} = $io_stats if defined $io_stats;
+
+    return $stats;
+}
+
+sub send_stats {
+    my $stats = shift;
+    my $json_stats = encode_json $stats;
+    debug("json: $json_stats", $debug);
 
 }
 
