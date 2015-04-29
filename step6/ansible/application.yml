@@ -1,0 +1,32 @@
+---
+- hosts: dockerhosts
+  tasks:
+  - name: Web application containers
+    sudo: yes
+    docker:
+      name: "{{ item }}"
+      image: rafacas/webapp
+      state: reloaded
+      pull: always
+      ports:
+        - 80
+    with_items:
+      - webapp1
+      - webapp2
+
+  - name: Load balancer container
+    sudo: yes
+    docker:
+      name: loadbalancer
+      image: rafacas/load_balancer
+      state: reloaded
+      pull: always
+      links:
+        - "webapp1:webapp1"    
+        - "webapp2:webapp2"    
+      ports:
+        - "80:80"
+
+  - name: Enable UFW port 80
+    sudo: yes
+    ufw: rule=allow port=80 proto=tcp

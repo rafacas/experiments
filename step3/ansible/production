@@ -1,0 +1,2 @@
+[dockerhosts]
+docker1 ansible_ssh_user=vagrant
