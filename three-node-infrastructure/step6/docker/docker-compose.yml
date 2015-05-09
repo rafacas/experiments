@@ -1,0 +1,15 @@
+loadbalancer:
+    build: ./load_balancer
+    links:
+        - webapp1:webapp1
+        - webapp2:webapp2
+    ports:
+        - "80:80"
+webapp1:
+    build: ./webapp
+    ports:
+        - "80"
+webapp2:
+    build: ./webapp
+    ports:
+        - "80"

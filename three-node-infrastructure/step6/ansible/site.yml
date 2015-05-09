@@ -1,0 +1,3 @@
+---
+- include: dockerhosts.yml
+- include: application.yml
